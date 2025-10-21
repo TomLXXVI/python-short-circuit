@@ -12,7 +12,8 @@ dependencies = [
     "numpy (>=2.2,<3.0)",
     "pint (>=0.24,<1.0)",
     "jupyter (>=1.1,<2.0)",
-    "pandas (>=2.2,<3.0)"
+    "pandas (>=2.2,<3.0)",
+    "matplotlib (>=3.10, <4.0)",
 ]
 
 [build-system]

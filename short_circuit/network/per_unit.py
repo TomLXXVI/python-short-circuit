@@ -1,12 +1,13 @@
 from typing import Union
 import math
-from . import Quantity
+from short_circuit import Quantity
 
 
 class PerUnitSystem:
 
     def __init__(self, S_base: Quantity, U_base: Quantity):
-        """Creates a `PerUnitSystem` object.
+        """
+        Creates a `PerUnitSystem` object.
         
         Parameters
         ----------
@@ -40,28 +41,45 @@ class PerUnitSystem:
         S_pu: Quantity = S_act / self.S_base
         return S_pu.to('VA / VA').magnitude
 
+    def get_actual_impedance(self, Z_pu: float) -> Quantity:
+        Z_act = Z_pu * self.Z_base
+        return Z_act
+
+    def get_actual_current(self, I_pu: float) -> Quantity:
+        I_act = I_pu * self.I_base
+        return I_act
+
+    def get_actual_voltage(self, U_pu: float) -> Quantity:
+        U_act = U_pu * self.U_base
+        return U_act
+
+    def get_actual_power(self, S_pu: float) -> Quantity:
+        S_act = S_pu * self.S_base
+        return S_act
+
 
 def convert_per_unit_impedance(
-    Z_pu_1: Union[float, complex],
-    per_unit_system_1: PerUnitSystem,
-    per_unit_system_2: PerUnitSystem
+    Z_pu: Union[float, complex],
+    from_: PerUnitSystem,
+    to_: PerUnitSystem
 ) -> Union[float, complex]:
-    """Converts per-unit impedance from per-unit system 1 to another per-unit 
-    system 2
+    """
+    Converts a per-unit impedance to another per-unit system.
 
     Parameters
     ----------
-    Z_pu_1:
-        Per-unit impedance according to per unit system 1.
-    per_unit_system_1:
-        Per-unit system of given per-unit impedance `Z_pu_1`.
-    per_unit_system_2:
-        Per-unit system to which the per-unit impedance `Z_pu_1` is to be 
-        converted.
-
-    Returns
-    -------
-    Per-unit impedance according to per-unit system 2.
+    Z_pu:
+        Per-unit impedance.
+    from_:
+        Per-unit system of `Z_pu`.
+    to_:
+        Per-unit system the per-unit impedance `Z_pu` is to be converted to.
     """
-    Z_pu_2 = Z_pu_1 * per_unit_system_1.Z_base / per_unit_system_2.Z_base
+    Z_pu_2 = Z_pu * from_.Z_base / to_.Z_base
     return Z_pu_2.magnitude
+
+
+__all__ = [
+    "PerUnitSystem",
+    "convert_per_unit_impedance"
+]

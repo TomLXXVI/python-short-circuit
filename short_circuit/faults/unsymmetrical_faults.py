@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 
 
-from short_circuit.network import Network, REF_NODE_INDEX, Node, Branch
+from short_circuit.network import Network, REF_NODE_INDEX, Node
 
 
 a = cmath.rect(1.0, math.radians(120.0))
@@ -21,7 +21,8 @@ A_inv = np.linalg.inv(A)
 
 
 def transform_to_012(Q_abc: npt.ArrayLike) -> npt.NDArray:
-    """Transforms a three-phase quantity `Q_abc` to its symmetrical components 
+    """
+    Transforms a three-phase quantity `Q_abc` to its symmetrical components
     `Q_012` (zero sequence, positive sequence, negative sequence).
     
     Parameters
@@ -47,7 +48,8 @@ def transform_to_012(Q_abc: npt.ArrayLike) -> npt.NDArray:
 
 
 def transform_to_abc(Q_012: npt.ArrayLike) -> npt.NDArray:
-    """Transforms the symmetrical components `Q_012` (zero sequence, positive 
+    """
+    Transforms the symmetrical components `Q_012` (zero sequence, positive
     sequence, negative sequence) to its corresponding three-phase quantity 
     `Q_abc`.
     
@@ -86,8 +88,8 @@ class UnSymmetricalFault(ABC):
         Parameters
         ----------
         network_012:
-            List of sequence networks, ordered as follows: first zero sequence 
-            (0), then positive sequence (1), and finally negative sequence (2).
+            List of sequence networks, ordered as follows: zero sequence
+            (0), positive sequence (1), and negative sequence (2).
         U_phase:
             Network voltage before the fault, i.e. the voltage between the 
             reference node of the network and each other network node, assuming 
@@ -138,37 +140,36 @@ class UnSymmetricalFault(ABC):
         I_f_abc = np.matmul(A, I_f_012)
         return I_f_abc
 
-    def get_node_voltage_012(self, node: Node | int) -> np.array:
+    def get_node_voltage_012(self, ID: str) -> np.array:
         """Returns the symmetric voltage components of the given network node."""
         k = self._faulted_node_index
-        if isinstance(node, Node):
-            i = node.index
-        else:
-            i = node
+        node = self._network_1.get_node(ID)
+        i = node.index
         Z_ik_0 = self._network_0.get_matrix_element(i, k)
         Z_ik_1 = self._network_1.get_matrix_element(i, k)
         Z_ik_2 = self._network_2.get_matrix_element(i, k)
         Z_ik_012 = np.diagflat([Z_ik_0, Z_ik_1, Z_ik_2])
+        if self._I_f_012 is None:
+            self.get_fault_current_012()
         dU_012 = np.matmul(Z_ik_012, self._I_f_012)
         U_pre_012 = np.array([[0.0, self._U_phase, 0.0]]).transpose()
         U_012 = U_pre_012 - dU_012
         return U_012
 
-    def get_node_voltage_abc(self, node: Node) -> np.array:
+    def get_node_voltage_abc(self, ID: str) -> np.array:
         """Returns the voltage components of the specified node in the 
         abc-reference frame.
         """
-        U_012 = self.get_node_voltage_012(node)
+        U_012 = self.get_node_voltage_012(ID)
         U_abc = np.matmul(A, U_012)
         return U_abc
 
-    def get_branch_current_012(self, branch: Branch) -> np.array:
+    def get_branch_current_012(self, ID: Union[int, tuple[str | int, str]]) -> np.array:
         """Returns the symmetric current components in the specified branch."""
-        i = branch.start_node.index
-        j = branch.end_node.index
-        branch_1 = self._network_1.get_branch(i, j)
-        branch_2 = self._network_2.get_branch(i, j)
-        branch_0 = self._network_0.get_branch(i, j)
+        branch_1 = self._network_1.get_branch(ID)
+        i = branch_1.start_node.index
+        branch_2 = self._network_2.get_branch((branch_1.start_node.ID, branch_1.end_node.ID))
+        branch_0 = self._network_0.get_branch((branch_1.start_node.ID, branch_1.end_node.ID))
         Z_b_0 = branch_0.impedance
         Z_b_1 = branch_1.impedance
         Z_b_2 = branch_2.impedance
@@ -182,17 +183,17 @@ class UnSymmetricalFault(ABC):
             else:
                 U_i_012 = np.array([[0.0, 0.0, 0.0]]).transpose()
         else:
-            U_i_012 = self.get_node_voltage_012(i)
-        U_j_012 = self.get_node_voltage_012(j)
+            U_i_012 = self.get_node_voltage_012(branch_1.start_node.ID)
+        U_j_012 = self.get_node_voltage_012(branch_1.end_node.ID)
         U_ij_012 = U_i_012 - U_j_012
         I_ij_012 = np.matmul(Y_b_012, U_ij_012)
         return I_ij_012
 
-    def get_branch_current_abc(self, branch: Branch) -> np.array:
+    def get_branch_current_abc(self, ID: Union[int, tuple[str | int, str]]) -> np.array:
         """Returns the current components in the specified branch in the 
         abc-reference frame.
         """
-        I_ij_012 = self.get_branch_current_012(branch)
+        I_ij_012 = self.get_branch_current_012(ID)
         I_ij_abc = np.matmul(A, I_ij_012)
         return I_ij_abc
 
@@ -240,3 +241,6 @@ class LineToLineToGroundFault(UnSymmetricalFault):
 
         self._I_f_012 = np.array([[I_f_0, I_f_1, I_f_2]]).transpose()
         return self._I_f_012
+
+
+__all__ = ["A", "LineToGroundFault", "LineToLineFault", "LineToLineToGroundFault"]

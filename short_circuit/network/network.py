@@ -28,6 +28,10 @@ class Branch:
     impedance: TImpedanceValue
     has_source: bool = False
 
+    @property
+    def nodes(self) -> tuple['Node', 'Node']:
+        return self.start_node, self.end_node
+
     def __str__(self):
         return (
             f"Branch {self.ID} "
@@ -300,7 +304,7 @@ class Network:
         end_node.connect(new_branch, Direction.INCOMING)
         return new_branch
     
-    def _get_node(self, node_ID: str | None) -> int | None:
+    def _get_node_index(self, node_ID: str | None) -> int | None:
         if node_ID is None:
             # reference node is asked
             return self._ref_node.index
@@ -345,8 +349,8 @@ class Network:
         Newly added nodes are assigned a successive index (integer number) in 
         the order they are added, starting from index 0.
         """
-        start_node_index = self._get_node(start_node_ID)
-        end_node_index = self._get_node(end_node_ID)
+        start_node_index = self._get_node_index(start_node_ID)
+        end_node_index = self._get_node_index(end_node_ID)
         if (start_node_index == REF_NODE_INDEX) and (end_node_index is None):
             # case 1: branch between reference node and new node
             self._add_impedance_case1(Z, has_source)
@@ -367,33 +371,50 @@ class Network:
 
     def get_branch(
         self, 
-        ID: Optional[int],
-        start_node_index: Optional[int] = None, 
-        end_node_index: Optional[int] = None
-    ) -> Branch:
-        """Returns the network branch between the given start node index and end
-        node index.
-
-        If the branch does not exist, a new branch with infinite impedance 
-        (resistance) is returned. The start and end node of this branch are set 
-        to the indicated start and end node in the call. This is provided for 
-        zero sequence networks, where branches can be open. These branches 
-        aren't included in the impedance matrix of the zero sequence network, 
-        but their corresponding, closed branches do exist in the positive and 
-        negative sequence networks.
+        ID: Union[int, tuple[str | int, str]],
+    ) -> Branch | List[Branch]:
         """
-        branch = self._branches.get(ID)
-        if branch:
-            return branch
-        # start_node_ID = self._nodes_indexes[start_node_index].ID
-        # end_node_ID = self._nodes_indexes[end_node_index].ID
-        # for branch in self._branches.values():
-        #     if (branch.start_node.ID == start_node_ID) and (branch.end_node.ID == end_node_ID):
-        #         return branch
+        Returns the network branch with the given ID in case ID is an int.
+        Otherwise, ID must be a tuple with the IDs of the start node and the end
+        node of the branch.
+
+        If the ID is a tuple, it may also be possible that there are multiple
+        branches between the same start node and end node. In that case a list
+        of these branches will be returned.
+
+        If the ID is a tuple, but the branch does not exist, a new branch with
+        infinite impedance (resistance) is returned. The start and end node of
+        this branch are set to the indicated start and end node in the call.
+        This is provided for zero sequence networks, where branches can be open.
+        Such branches aren't included in the impedance matrix of the zero
+        sequence network, but their corresponding, closed branches do exist in
+        the positive and negative sequence networks.
+        """
+        if isinstance(ID, int):
+            return self._branches.get(ID)
+
+        ID_list = []
+        for branch in self._branches.values():
+            start_node, end_node = branch.nodes
+            if (start_node.ID, end_node.ID) == ID or (end_node.ID, start_node.ID) == ID:
+                ID_list.append(branch.ID)
+
+        branches = []
+        for ID in ID_list:
+            branch = self._branches.get(ID)
+            branches.append(branch)
+
+        if branches:
+            if len(branches) == 1:
+                return branches[0]
+            else:
+                return branches
         else:
+            start_node = self.get_node(ID[0])
+            end_node = self.get_node(ID[1])
             open_branch = self._create_branch(
-                start_node_index, end_node_index, 
-                float('inf')
+                start_node.index, end_node.index,
+                math.inf
             )
             return open_branch
 
@@ -436,7 +457,7 @@ class Network:
                     else branch_0.start_node
                 )
                 previous_branch = branch_0
-                
+
         paths = []
         initial_path = CurrentPath()
         paths.append(initial_path)
@@ -444,8 +465,7 @@ class Network:
         _search(initial_node, initial_path)
         return paths
 
-    def display_impedance_matrix(self) -> None:
-        """Prints the impedance matrix of the network."""
+    def __str__(self):
         index = [
             self._nodes_indexes[i].ID
             for i in range(self.shape.rows)
@@ -457,23 +477,55 @@ class Network:
             columns=columns
         )
         with pd.option_context(
-            'display.max_rows', None, 
-            'display.max_columns', None, 
-            'display.width', 320
+                'display.max_rows', None,
+                'display.max_columns', None,
+                'display.width', 320
         ):
-            print(df)
+            return str(df)
+
+    def show_impedance_matrix(self) -> None:
+        """Prints the bus impedance matrix of the network."""
+        print(str(self))
 
     def get_node_index(self, node_ID: str) -> int:
         """Returns the index of the node whose ID is given."""
         node_index = self._nodes_IDs[node_ID].index
         return node_index
-    
+
+    def get_node(self, node_ID: str) -> Node:
+        """Returns the `Node` object whose ID is given."""
+        return self._nodes_IDs[node_ID]
+
     @property
     def nodes(self) -> Iterator[Node]:
         """Returns an iterator over the nodes in the network."""
-        return iter(self._nodes_indexes.values())
+        return iter(node for node in self._nodes_indexes.values() if node.index != -1)
     
     @property
     def branches(self) -> Iterator[Branch]:
         """Returns an iterator over the branches in the network."""
         return iter(self._branches.values())
+
+    def rebuild(self) -> 'Network':
+        """
+        Rebuilds the network, e.g. after changing the impedance value of a
+        network branch.
+        """
+        new_network = self.__class__()
+        for branch in self.branches:
+            new_network.add_branch(
+                branch.impedance,
+                branch.start_node.ID,
+                branch.end_node.ID,
+                branch.has_source
+            )
+        return new_network
+
+
+__all__ = [
+    "Branch",
+    "Node",
+    "CurrentPath",
+    "Network",
+    "REF_NODE_INDEX"
+]
