@@ -116,8 +116,8 @@ class ThreePhaseFault:
     def get_currents_to_node(self, ID: str) -> list[tuple[str, Union[float, complex]]]:
         """
         Returns the branch currents that flow to the node with the given ID.
-        The currents are returned in a dict whose keys are the ID of the node
-        on the other end of the branch.
+        The currents are returned in a list of tuples. First element of the
+        tuples are the ID of the node on the other end of the branch.
         """
         node = self._network.get_node(ID)
         currents_to_node = []

@@ -23,7 +23,7 @@ from short_circuit import (
     PerUnitSystem,
     Network,
     ThreePhaseFault,
-    complex_number_as_polar_string
+    complex_number_to_polar_string
 )
 
 Q_ = Quantity
@@ -83,7 +83,7 @@ E1 = fault_3ph.get_node_voltage("1")
 print(f"voltage at bus 1 during the fault: {E1:.4g}")
 
 E4 = fault_3ph.get_node_voltage("4")
-print(f"voltage at bus 4 during the fault: {complex_number_as_polar_string(E4)}")
+print(f"voltage at bus 4 during the fault: {complex_number_to_polar_string(E4)}")
 
 I23 = fault_3ph.get_branch_current(("2", "3"))
 print(f"current through transmission line during the fault: {I23:.4g}")
@@ -104,10 +104,10 @@ Im = fault_3ph.get_branch_current(("ref", "4"))
 print(f"subtransient motor current: {Im:.4g}")
 
 E1 = fault_3ph.get_node_voltage("1")
-print(f"voltage at bus 1 during the fault: {complex_number_as_polar_string(E1)}")
+print(f"voltage at bus 1 during the fault: {complex_number_to_polar_string(E1)}")
 
 E4 = fault_3ph.get_node_voltage("4")
-print(f"voltage at bus 4 during the fault: {complex_number_as_polar_string(E4)}")
+print(f"voltage at bus 4 during the fault: {complex_number_to_polar_string(E4)}")
 
 I23 = fault_3ph.get_branch_current(("2", "3"))
 print(f"current through transmission line during the fault: {I23:.4g}")

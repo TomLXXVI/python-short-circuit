@@ -484,7 +484,7 @@ class Network:
             return str(df)
 
     def show_impedance_matrix(self) -> None:
-        """Prints the bus impedance matrix of the network."""
+        """Prints the bus impedance matrix of the network to screen."""
         print(str(self))
 
     def get_node_index(self, node_ID: str) -> int:

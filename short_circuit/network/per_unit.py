@@ -1,5 +1,7 @@
 from typing import Union
 import math
+import numpy as np
+import numpy.typing as npt
 from short_circuit import Quantity
 
 
@@ -45,7 +47,7 @@ class PerUnitSystem:
         Z_act = Z_pu * self.Z_base
         return Z_act
 
-    def get_actual_current(self, I_pu: float) -> Quantity:
+    def get_actual_current(self, I_pu: float | npt.ArrayLike) -> Quantity:
         I_act = I_pu * self.I_base
         return I_act
 

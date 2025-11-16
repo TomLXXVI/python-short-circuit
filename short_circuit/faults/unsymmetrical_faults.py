@@ -2,11 +2,11 @@ from typing import List, Optional, Union
 from abc import ABC, abstractmethod
 import math
 import cmath
+
 import numpy as np
 import numpy.typing as npt
 
-
-from short_circuit.network import Network, REF_NODE_INDEX, Node
+from short_circuit.network import Network, REF_NODE_INDEX
 
 
 a = cmath.rect(1.0, math.radians(120.0))
@@ -39,7 +39,7 @@ def transform_to_012(Q_abc: npt.ArrayLike) -> npt.NDArray:
         (flat) Numpy array. 
     """
     if not isinstance(Q_abc, np.ndarray):
-        Q_abc = np.array(Q_abc)
+        Q_abc = np.asarray(Q_abc)
     if len(Q_abc.shape) == 1:
         Q_abc = np.reshape(Q_abc, (1, len(Q_abc)))
     Q_abc = np.transpose(Q_abc)
@@ -67,12 +67,37 @@ def transform_to_abc(Q_012: npt.ArrayLike) -> npt.NDArray:
         a 1D (flat) Numpy array.
     """
     if not isinstance(Q_012, np.ndarray):
-        Q_012 = np.array(Q_012)
+        Q_012 = np.asarray(Q_012)
     if len(Q_012.shape) == 1:
         Q_012 = np.reshape(Q_012, (1, len(Q_012)))
-    Q_012 = np.transpose(Q_012)
+    if Q_012.shape[0] == 1:
+        Q_012 = np.transpose(Q_012)
     Q_abc = np.round(A @ Q_012, 9)
     return Q_abc.flatten()
+
+
+def add_phase_shift(Q: complex | npt.ArrayLike, degrees: float) -> npt.NDArray:
+    """
+    Adds a phase shift (in degrees) to the phase angle of complex number `Q`.
+    """
+    Q *= np.exp(1j * np.deg2rad(degrees))
+    return Q
+
+
+def add_deltastar_transformer_shift(I_012: npt.ArrayLike) -> npt.NDArray:
+    """
+    Adds a delta-star transformer phase shift to the sequence components
+    `I_012` of the branch current.
+
+    In accordance with the American standard, positive-sequence quantities on
+    the high-voltage side of the transformers lead their corresponding
+    quantities on the low-voltage side by 30°. Also, the negative-sequence phase
+    shifts are the reverse of the positive-sequence phase shifts.
+    """
+    I_1 = add_phase_shift(I_012[1], 30.0)
+    I_2 = add_phase_shift(I_012[2], -30.0)
+    I_012 = np.array([I_012[0], I_1, I_2])
+    return I_012
 
 
 class UnSymmetricalFault(ABC):
@@ -80,17 +105,18 @@ class UnSymmetricalFault(ABC):
     def __init__(
         self,
         network_012: List[Network],
-        U_phase: Union[float, complex] = 1.0,
+        U_prefault: Union[float, complex] = 1.0,
         c: float = 1.0
     ) -> None:
-        """Creates a `UnSymmetricalFault` object.
+        """
+        Creates a `UnSymmetricalFault` object.
         
         Parameters
         ----------
         network_012:
             List of sequence networks, ordered as follows: zero sequence
             (0), positive sequence (1), and negative sequence (2).
-        U_phase:
+        U_prefault:
             Network voltage before the fault, i.e. the voltage between the 
             reference node of the network and each other network node, assuming 
             the network is unloaded before the fault.    
@@ -100,18 +126,19 @@ class UnSymmetricalFault(ABC):
         self._network_0 = network_012[0]
         self._network_1 = network_012[1]
         self._network_2 = network_012[2]
-        self._U_phase: Union[float, complex] = c * U_phase
+        self._U_phase: Union[float, complex] = c * U_prefault
         self._faulted_node_ID: Optional[str] = None
         self._faulted_node_index: Optional[int] = None
         self._Z_f: Union[float, complex] = 0.0
-        self._I_f_012: Optional[np.array] = None
+        self._I_f_012: Optional[np.ndarray] = None
 
     def set_faulted_node(
         self, 
         node_ID: str, 
         Z_fault: Union[float, complex] = 0.0
     ) -> None:
-        """Sets the network node where the fault occurs.
+        """
+        Sets the network node where the fault occurs.
         
         Parameters
         ----------
@@ -126,22 +153,26 @@ class UnSymmetricalFault(ABC):
         self._Z_f = Z_fault
 
     @abstractmethod
-    def get_fault_current_012(self) -> np.array:
-        """Returns the symmetric components of the fault current (zero-sequence,
+    def get_fault_current_012(self) -> np.ndarray:
+        """
+        Returns the sequence components of the fault current (zero-sequence,
         positive sequence, and negative sequence component).
         """
         ...
 
-    def get_fault_current_abc(self) -> np.array:
-        """Returns the three-phase fault current components in the abc-reference
+    def get_fault_current_abc(self) -> np.ndarray:
+        """
+        Returns the three-phase fault current components in the abc-reference
         frame.
         """
         I_f_012 = self.get_fault_current_012()
         I_f_abc = np.matmul(A, I_f_012)
         return I_f_abc
 
-    def get_node_voltage_012(self, ID: str) -> np.array:
-        """Returns the symmetric voltage components of the given network node."""
+    def get_node_voltage_012(self, ID: str) -> np.ndarray:
+        """
+        Returns the sequence voltage components of the given network node.
+        """
         k = self._faulted_node_index
         node = self._network_1.get_node(ID)
         i = node.index
@@ -156,16 +187,22 @@ class UnSymmetricalFault(ABC):
         U_012 = U_pre_012 - dU_012
         return U_012
 
-    def get_node_voltage_abc(self, ID: str) -> np.array:
-        """Returns the voltage components of the specified node in the 
+    def get_node_voltage_abc(self, ID: str) -> np.ndarray:
+        """
+        Returns the three-phase voltage components of the specified node in the
         abc-reference frame.
         """
         U_012 = self.get_node_voltage_012(ID)
         U_abc = np.matmul(A, U_012)
         return U_abc
 
-    def get_branch_current_012(self, ID: Union[int, tuple[str | int, str]]) -> np.array:
-        """Returns the symmetric current components in the specified branch."""
+    def get_branch_current_012(
+        self,
+        ID: Union[int, tuple[str | int, str]]
+    ) -> np.ndarray:
+        """
+        Returns the sequence components of the current in the specified branch.
+        """
         branch_1 = self._network_1.get_branch(ID)
         i = branch_1.start_node.index
         branch_2 = self._network_2.get_branch((branch_1.start_node.ID, branch_1.end_node.ID))
@@ -189,18 +226,41 @@ class UnSymmetricalFault(ABC):
         I_ij_012 = np.matmul(Y_b_012, U_ij_012)
         return I_ij_012
 
-    def get_branch_current_abc(self, ID: Union[int, tuple[str | int, str]]) -> np.array:
-        """Returns the current components in the specified branch in the 
-        abc-reference frame.
+    def get_branch_current_abc(
+        self,
+        ID: Union[int, tuple[str | int, str]]
+    ) -> np.ndarray:
+        """
+        Returns the three-phase components of the current in the specified
+        branch in the abc-reference frame.
         """
         I_ij_012 = self.get_branch_current_012(ID)
         I_ij_abc = np.matmul(A, I_ij_012)
         return I_ij_abc
 
+    def get_currents_to_node_012(self, ID: str) -> list[tuple[str, np.ndarray]]:
+        """
+        Returns the sequence components of the branch currents that flow to the
+        node with the given ID. The currents are returned in a list of tuples.
+        First element of the tuples are the ID of the node on the other end of
+        the branch.
+        """
+        node = self._network_1.get_node(ID)
+        currents_to_node = []
+        for branch in node.incoming:
+            other_node = branch.start_node
+            I = self.get_branch_current_012(branch.ID)
+            currents_to_node.append((other_node.ID, I))
+        for branch in node.outgoing:
+            other_node = branch.end_node
+            I = self.get_branch_current_012(branch.ID)
+            currents_to_node.append((other_node.ID, -I))
+        return currents_to_node
+
 
 class LineToGroundFault(UnSymmetricalFault):
 
-    def get_fault_current_012(self) -> np.array:
+    def get_fault_current_012(self) -> np.ndarray:
         k = self._faulted_node_index
         Z_kk_0 = self._network_0.get_matrix_element(k, k)
         Z_kk_1 = self._network_1.get_matrix_element(k, k)
@@ -212,7 +272,7 @@ class LineToGroundFault(UnSymmetricalFault):
 
 class LineToLineFault(UnSymmetricalFault):
 
-    def get_fault_current_012(self) -> np.array:
+    def get_fault_current_012(self) -> np.ndarray:
         k = self._faulted_node_index
         Z_kk_1 = self._network_1.get_matrix_element(k, k)
         Z_kk_2 = self._network_2.get_matrix_element(k, k)
@@ -223,9 +283,9 @@ class LineToLineFault(UnSymmetricalFault):
         return self._I_f_012
 
 
-class LineToLineToGroundFault(UnSymmetricalFault):
+class DoubleLineToGroundFault(UnSymmetricalFault):
 
-    def get_fault_current_012(self) -> np.array:
+    def get_fault_current_012(self) -> np.ndarray:
         k = self._faulted_node_index
         Z_kk_0 = self._network_0.get_matrix_element(k, k)
         Z_kk_1 = self._network_1.get_matrix_element(k, k)
@@ -243,4 +303,14 @@ class LineToLineToGroundFault(UnSymmetricalFault):
         return self._I_f_012
 
 
-__all__ = ["A", "LineToGroundFault", "LineToLineFault", "LineToLineToGroundFault"]
+__all__ = [
+    "A",
+    "A_inv",
+    "transform_to_012",
+    "transform_to_abc",
+    "add_phase_shift",
+    "add_deltastar_transformer_shift",
+    "LineToGroundFault",
+    "LineToLineFault",
+    "DoubleLineToGroundFault"
+]
